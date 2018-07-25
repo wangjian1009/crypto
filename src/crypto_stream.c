@@ -304,7 +304,7 @@ int crypto_stream_decrypt_all(
     size_t plaintext_size = ciphertext_size - cipher->nonce_len;
     void * plaintext = mem_buffer_alloc(&processor->m_data_buffer, plaintext_size);
         
-    if (processor->m_ppbloom && crypto_ppbloom_check(processor->m_ppbloom, cipher_ctx.nonce, cipher->nonce_len) == 1) {
+    if (processor->m_ppbloom && crypto_ppbloom_check(processor->m_ppbloom, cipher_ctx.nonce, (int)cipher->nonce_len) == 1) {
         CPE_ERROR(processor->m_em, "crypto: stream: repeat IV detected");
         return -1;
     }

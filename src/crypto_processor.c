@@ -120,19 +120,19 @@ void crypto_processor_set_debug(crypto_processor_t processor, uint8_t debug) {
 }
 
 int crypto_encrypt_all(crypto_processor_t processor, write_stream_t ws, void const * data, size_t data_len) {
-    return processor->encrypt_all(processor, ws, data, data_len);
+    return processor->encrypt_all(processor, ws, data, (uint32_t)data_len);
 }
 
 int crypto_decrypt_all(crypto_processor_t processor, write_stream_t ws, void const * data, size_t data_len) {
-    return processor->decrypt_all(processor, ws, data, data_len);
+    return processor->decrypt_all(processor, ws, data, (uint32_t)data_len);
 }
 
 int crypto_encrypt(crypto_cipher_ctx_t cipher_ctx, write_stream_t ws, void const * data, size_t data_len) {
-    return cipher_ctx->m_processor->encrypt(cipher_ctx->m_processor, &cipher_ctx->m_data, ws, data, data_len);
+    return cipher_ctx->m_processor->encrypt(cipher_ctx->m_processor, &cipher_ctx->m_data, ws, data, (uint32_t)data_len);
 }
 
 int crypto_decrypt(crypto_cipher_ctx_t cipher_ctx, write_stream_t ws, void const * data, size_t data_len) {
-    return cipher_ctx->m_processor->decrypt(cipher_ctx->m_processor, &cipher_ctx->m_data, ws, data, data_len);
+    return cipher_ctx->m_processor->decrypt(cipher_ctx->m_processor, &cipher_ctx->m_data, ws, data, (uint32_t)data_len);
 }
 
 static void crypto_processor_entropy_check(error_monitor_t em) {
@@ -179,7 +179,7 @@ int crypto_parse_key(crypto_processor_t processor, const char *base64, uint8_t *
         cpe_base64_dump(&processor->m_tmp_buffer, key, key_len));
     CPE_INFO(processor->m_em, "Please use the key above or input a valid key");
     
-    return key_len;
+    return (int)key_len;
 }
 
 int crypto_derive_key(crypto_processor_t processor, const char *pass, uint8_t *key, size_t key_len) {
@@ -201,7 +201,7 @@ int crypto_derive_key(crypto_processor_t processor, const char *pass, uint8_t *k
     memset(&c, 0, sizeof(mbedtls_md_context_t));
 
     if (pass == NULL) {
-        return key_len;
+        return (int)key_len;
     }
     
     if (mbedtls_md_setup(&c, md, 1)) {
@@ -224,7 +224,7 @@ int crypto_derive_key(crypto_processor_t processor, const char *pass, uint8_t *k
     }
 
     mbedtls_md_free(&c);
-    return key_len;
+    return (int)key_len;
 }
 
 const char * crypto_method_name(crypto_method_t method) {
