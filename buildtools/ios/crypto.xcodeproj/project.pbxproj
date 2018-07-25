@@ -1932,6 +1932,7 @@
 		C9F30CD82108A33F006A7621 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				EXCLUDED_RECURSIVE_SEARCH_PATH_SUBDIRECTORIES = "*.nib *.lproj *.framework *.gch *.xcode* *.xcassets (*) .DS_Store CVS .svn .git .hg *.pbproj *.pbxproj mbedtls";
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -1946,6 +1947,7 @@
 					"VERSION=\"1.0.15\"",
 					"CONFIGURED=1",
 				);
+				GCC_WARN_UNUSED_VARIABLE = NO;
 				HEADER_SEARCH_PATHS = (
 					../../depends/mbedtls/include,
 					../../../cpe/include,
@@ -1963,6 +1965,7 @@
 		C9F30CD92108A33F006A7621 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				EXCLUDED_RECURSIVE_SEARCH_PATH_SUBDIRECTORIES = "*.nib *.lproj *.framework *.gch *.xcode* *.xcassets (*) .DS_Store CVS .svn .git .hg *.pbproj *.pbxproj mbedtls";
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -1977,6 +1980,7 @@
 					"VERSION=\"1.0.15\"",
 					"CONFIGURED=1",
 				);
+				GCC_WARN_UNUSED_VARIABLE = NO;
 				HEADER_SEARCH_PATHS = (
 					../../depends/mbedtls/include,
 					../../../cpe/include,
