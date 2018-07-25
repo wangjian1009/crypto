@@ -341,7 +341,7 @@ int crypto_stream_decrypt_all(
     }
 
     if (processor->m_ppbloom) {
-        crypto_ppbloom_add(processor->m_ppbloom, (void *)cipher_ctx.nonce, cipher->nonce_len);
+        crypto_ppbloom_add(processor->m_ppbloom, (void *)cipher_ctx.nonce, (int)cipher->nonce_len);
     }
 
     int len = stream_write(ws, plaintext, plaintext_size);
@@ -401,7 +401,7 @@ int crypto_stream_decrypt(
         cipher_ctx->init    = 1;
 
         if (cipher->method >= crypto_method_stream_rc4_md5) {
-            if (processor->m_ppbloom && crypto_ppbloom_check(processor->m_ppbloom, (void *)cipher_ctx->nonce, cipher->nonce_len) == 1) {
+            if (processor->m_ppbloom && crypto_ppbloom_check(processor->m_ppbloom, (void *)cipher_ctx->nonce, (int)cipher->nonce_len) == 1) {
                 CPE_ERROR(processor->m_em, "crypto: stream: repeat IV detected");
                 return -1;
             }
@@ -472,11 +472,11 @@ int crypto_stream_decrypt(
     if (cipher_ctx->init == 1) {
         if (cipher->method >= crypto_method_stream_rc4_md5) {
             if (processor->m_ppbloom) {
-                if (processor->m_ppbloom && crypto_ppbloom_check(processor->m_ppbloom, (void *)cipher_ctx->nonce, cipher->nonce_len) == 1) {
+                if (processor->m_ppbloom && crypto_ppbloom_check(processor->m_ppbloom, (void *)cipher_ctx->nonce, (int)cipher->nonce_len) == 1) {
                     CPE_ERROR(processor->m_em, "crypto: stream: repeat IV detected");
                     return -1;
                 }
-                crypto_ppbloom_add(processor->m_ppbloom, (void *)cipher_ctx->nonce, cipher->nonce_len);
+                crypto_ppbloom_add(processor->m_ppbloom, (void *)cipher_ctx->nonce, (int)cipher->nonce_len);
             }
             cipher_ctx->init = 2;
         }
@@ -590,7 +590,7 @@ static int crypto_cipher_ctx_set_nonce(
         return -1;
     }
     
-    if (mbedtls_cipher_setkey(evp, true_key, cipher->key_len * 8, is_encode ? MBEDTLS_ENCRYPT : MBEDTLS_DECRYPT) != 0) {
+    if (mbedtls_cipher_setkey(evp, true_key, (int)(cipher->key_len * 8), is_encode ? MBEDTLS_ENCRYPT : MBEDTLS_DECRYPT) != 0) {
         mbedtls_cipher_free(evp);
         CPE_ERROR(process->m_em, "Cannot set mbed TLS cipher key");
         return -1;
