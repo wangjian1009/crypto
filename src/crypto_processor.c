@@ -2,6 +2,7 @@
 #include "cpe/pal/pal_strings.h"
 #include "cpe/pal/pal_stdio.h"
 #include "cpe/utils/base64.h"
+#include "cpe/utils/md5.h"
 #include "cpe/utils/stream_mem.h"
 #include "cpe/utils/stream_buffer.h"
 #include "cpe/utils/hex_utils.h"
@@ -182,48 +183,34 @@ int crypto_parse_key(crypto_processor_t processor, const char *base64, uint8_t *
     return (int)key_len;
 }
 
+
 int crypto_derive_key(crypto_processor_t processor, const char *pass, uint8_t *key, size_t key_len) {
     size_t datal;
     datal = strlen((const char *)pass);
 
-    const crypto_digest_type * md = mbedtls_md_info_from_string("MD5");
-    if (md == NULL) {
-        CPE_ERROR(processor->m_em, "MD5 Digest not found in crypto library");
-        return -1;
-    }
-
-    mbedtls_md_context_t c;
-    unsigned char md_buf[MAX_MD_SIZE];
     int addmd;
-    unsigned int i, j, mds;
-
-    mds = mbedtls_md_get_size(md);
-    memset(&c, 0, sizeof(mbedtls_md_context_t));
+    unsigned int i, j;
 
     if (pass == NULL) {
         return (int)key_len;
     }
-    
-    if (mbedtls_md_setup(&c, md, 1)) {
-        return 0;
-    }
 
+    struct cpe_md5_ctx md5_ctx;
     for (j = 0, addmd = 0; j < key_len; addmd++) {
-        mbedtls_md_starts(&c);
+        cpe_md5_ctx_init(&md5_ctx);
         if (addmd) {
-            mbedtls_md_update(&c, md_buf, mds);
+            cpe_md5_ctx_update(&md5_ctx, &md5_ctx.value, sizeof(md5_ctx.value));
         }
-        mbedtls_md_update(&c, (uint8_t *)pass, datal);
-        mbedtls_md_finish(&c, &(md_buf[0]));
+        cpe_md5_ctx_update(&md5_ctx, pass, datal);
+        cpe_md5_ctx_final(&md5_ctx);
 
-        for (i = 0; i < mds; i++, j++) {
+        for (i = 0; i < sizeof(md5_ctx.value); i++, j++) {
             if (j >= key_len)
                 break;
-            key[j] = md_buf[i];
+            key[j] = md5_ctx.value.digest[i];
         }
     }
-
-    mbedtls_md_free(&c);
+    
     return (int)key_len;
 }
 
