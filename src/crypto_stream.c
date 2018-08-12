@@ -329,7 +329,7 @@ int crypto_stream_decrypt_all(
         return -1;
     }
 
-    if (processor->m_debug) {
+    if (processor->m_debug >= 2) {
         mem_buffer_clear_data(&processor->m_tmp_buffer);
         CPE_INFO(processor->m_em, "PLAIN: %s", cpe_hex_dup_buf(plaintext, plaintext_size, &processor->m_tmp_buffer));
         mem_buffer_clear_data(&processor->m_tmp_buffer);
@@ -459,7 +459,7 @@ int crypto_stream_decrypt(
         return -1;
     }
 
-    if (processor->m_debug) {
+    if (processor->m_debug >= 2) {
         mem_buffer_clear_data(&processor->m_tmp_buffer);
         CPE_INFO(processor->m_em, "PLAIN: %s", cpe_hex_dup_buf(plaintext, plaintext_size, &processor->m_tmp_buffer));
         mem_buffer_clear_data(&processor->m_tmp_buffer);
