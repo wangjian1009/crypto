@@ -172,11 +172,8 @@ int crypto_stream_encrypt_all(crypto_processor_t processor, write_stream_t ws, v
     }
 
     if (processor->m_debug >= 2) {
-        mem_buffer_clear_data(&processor->m_tmp_buffer);
         CPE_INFO(processor->m_em, "PLAIN: %s", cpe_hex_dup_buf(plaintext, plaintext_size, &processor->m_tmp_buffer));
-        mem_buffer_clear_data(&processor->m_tmp_buffer);
         CPE_INFO(processor->m_em, "CIPHER: %s", cpe_hex_dup_buf(ciphertext, ciphertext_size, &processor->m_tmp_buffer));
-        mem_buffer_clear_data(&processor->m_tmp_buffer);
         CPE_INFO(processor->m_em, "NONCE: %s", cpe_hex_dup_buf(nonce, nonce_len, &processor->m_tmp_buffer));
     }
 
@@ -330,11 +327,8 @@ int crypto_stream_decrypt_all(
     }
 
     if (processor->m_debug >= 2) {
-        mem_buffer_clear_data(&processor->m_tmp_buffer);
         CPE_INFO(processor->m_em, "PLAIN: %s", cpe_hex_dup_buf(plaintext, plaintext_size, &processor->m_tmp_buffer));
-        mem_buffer_clear_data(&processor->m_tmp_buffer);
         CPE_INFO(processor->m_em, "CIPHER: %s", cpe_hex_dup_buf(ciphertext, ciphertext_size, &processor->m_tmp_buffer));
-        mem_buffer_clear_data(&processor->m_tmp_buffer);
         CPE_INFO(processor->m_em, "NONCE: %s", cpe_hex_dup_buf(cipher_ctx.nonce, cipher->nonce_len, &processor->m_tmp_buffer));
     }
 
@@ -460,9 +454,7 @@ int crypto_stream_decrypt(
     }
 
     if (processor->m_debug >= 2) {
-        mem_buffer_clear_data(&processor->m_tmp_buffer);
         CPE_INFO(processor->m_em, "PLAIN: %s", cpe_hex_dup_buf(plaintext, plaintext_size, &processor->m_tmp_buffer));
-        mem_buffer_clear_data(&processor->m_tmp_buffer);
         CPE_INFO(processor->m_em, "CIPHER: %s", cpe_hex_dup_buf(ciphertext, ciphertext_size, &processor->m_tmp_buffer));
     }
 
