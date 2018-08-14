@@ -598,10 +598,8 @@ static int crypto_cipher_ctx_set_nonce(
         return -1;
     }
 
-    if (process->m_debug) {
-        mem_buffer_clear_data(&process->m_tmp_buffer);
+    if (process->m_debug >= 2) {
         CPE_INFO(process->m_em, "NONCE: %s", cpe_hex_dup_buf(nonce, nonce_len, &process->m_tmp_buffer));
-        mem_buffer_clear_data(&process->m_tmp_buffer);
         CPE_INFO(process->m_em, "KEY: %s", cpe_hex_dup_buf(true_key, 32, &process->m_tmp_buffer));
     }
     
