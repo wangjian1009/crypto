@@ -27,10 +27,13 @@ struct crypto_processor {
     mem_allocrator_t m_alloc;
     error_monitor_t m_em;
     uint8_t m_debug;
-    struct mem_buffer m_data_buffer;
     struct mem_buffer m_tmp_buffer;
     crypto_ppbloom_t m_ppbloom;
 
+    uint32_t m_process_block_size;
+    uint32_t m_process_buf_capacity;
+    uint8_t * m_process_bufs[2];
+    
     crypto_cipher_t m_cipher;
     int(*encrypt_all)(crypto_processor_t processor, write_stream_t ws, void const * data, uint32_t data_size);
     int(*decrypt_all)(crypto_processor_t processor, write_stream_t ws, void const * data, uint32_t data_size);
@@ -43,6 +46,8 @@ struct crypto_processor {
 
 int crypto_parse_key(crypto_processor_t processor, const char *base64, uint8_t *key, size_t key_len);
 int crypto_derive_key(crypto_processor_t processor, const char *pass, uint8_t *key, size_t key_len);
+
+uint8_t * crypto_processor_get_buf(crypto_processor_t processor, uint8_t id);
 
 CRYPTO_END_DECL
 

@@ -12,8 +12,6 @@ crypto_cipher_t crypto_chipper_stream_create(
     crypto_processor_t processor,
     const char * password, const char * key, crypto_method_t method);
 
-int crypto_stream_encrypt_all(crypto_processor_t processor, write_stream_t ws, void const * data, uint32_t data_size);
-int crypto_stream_decrypt_all(crypto_processor_t processor, write_stream_t ws, void const * data, uint32_t data_size);
 int crypto_stream_encrypt(crypto_processor_t processor, crypto_cipher_ctx_data_t cipher_ctx, write_stream_t ws, void const * data, uint32_t data_size);
 int crypto_stream_decrypt(crypto_processor_t processor, crypto_cipher_ctx_data_t cipher_ctx, write_stream_t ws, void const * data, uint32_t data_size);
 

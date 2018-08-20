@@ -126,66 +126,6 @@ crypto_stream_get_cipher_type(crypto_processor_t processor, crypto_method_t meth
     }
 }
 
-int crypto_stream_encrypt_all(crypto_processor_t processor, write_stream_t ws, void const * plaintext, uint32_t plaintext_size) {
-    crypto_cipher_t cipher = processor->m_cipher;
-    int totall_len = 0;
-    int once_len;
-    
-    struct crypto_cipher_ctx_data cipher_ctx;
-    if (crypto_stream_ctx_init(processor, &cipher_ctx, 1) != 0) return -1;
-
-    size_t nonce_len = cipher->nonce_len;
-    uint8_t *nonce = cipher_ctx.nonce;
-    if (crypto_cipher_ctx_set_nonce(processor, &cipher_ctx, nonce, nonce_len, 1) != 0) {
-        crypto_stream_ctx_fini(processor, &cipher_ctx);
-        return -1;
-    }
-    once_len = stream_write(ws, nonce, nonce_len);
-    if (once_len != nonce_len) {
-        return -1;
-    }
-
-    mem_buffer_t data_buffer = &processor->m_data_buffer;
-    mem_buffer_clear_data(data_buffer);
-
-    void * ciphertext = mem_buffer_alloc(data_buffer, plaintext_size);
-    size_t ciphertext_size = plaintext_size;
-    
-    int err = 0;
-    if (cipher->method >= crypto_method_stream_salsa20) {
-        err = crypto_stream_xor_ic(
-            (uint8_t *)ciphertext,
-            (const uint8_t *)plaintext, (uint64_t)(plaintext_size),
-            (const uint8_t *)nonce, 0, cipher->key, cipher->method);
-    }
-    else {
-        err = mbedtls_cipher_update(
-            cipher_ctx.evp,
-            (const uint8_t *)plaintext, (size_t)plaintext_size,
-            (uint8_t *)ciphertext, &ciphertext_size);
-    }
-    
-    crypto_stream_ctx_fini(processor, &cipher_ctx);
-
-    if (err) {
-        return -1;
-    }
-
-    if (processor->m_debug >= 2) {
-        CPE_INFO(processor->m_em, "PLAIN: %s", cpe_hex_dup_buf(plaintext, plaintext_size, &processor->m_tmp_buffer));
-        CPE_INFO(processor->m_em, "CIPHER: %s", cpe_hex_dup_buf(ciphertext, ciphertext_size, &processor->m_tmp_buffer));
-        CPE_INFO(processor->m_em, "NONCE: %s", cpe_hex_dup_buf(nonce, nonce_len, &processor->m_tmp_buffer));
-    }
-
-    once_len = stream_write(ws, ciphertext, ciphertext_size);
-    if (once_len != ciphertext_size) {
-        return -1;
-    }
-    totall_len += once_len;
-    
-    return totall_len;
-}
-
 int crypto_stream_encrypt(
     crypto_processor_t processor, crypto_cipher_ctx_data_t cipher_ctx,
     write_stream_t ws, void const * plaintext, uint32_t plaintext_size)
@@ -197,7 +137,7 @@ int crypto_stream_encrypt(
 
     assert(plaintext);
     assert(plaintext_size);
-    
+
     if (!cipher_ctx->init) {
         crypto_cipher_ctx_set_nonce(processor, cipher_ctx, cipher_ctx->nonce, cipher->nonce_len, 1);
 
@@ -214,8 +154,6 @@ int crypto_stream_encrypt(
         cipher_ctx->init    = 1;
     }
 
-    mem_buffer_clear_data(&processor->m_data_buffer);
-    
     void * ciphertext;
     size_t ciphertext_size;
 
@@ -223,18 +161,19 @@ int crypto_stream_encrypt(
         int padding = cipher_ctx->counter % SODIUM_BLOCK_SIZE;
 
         ciphertext_size = plaintext_size;
-        ciphertext = mem_buffer_alloc(&processor->m_data_buffer, (padding + plaintext_size) * 2);
+        ciphertext = crypto_processor_get_buf(processor, 0);
+        assert(ciphertext_size <= processor->m_process_buf_capacity);
 
         void const * input_buf = plaintext;
         size_t input_size = plaintext_size;
         
         if (padding) {
             input_size += padding;
+            input_buf = crypto_processor_get_buf(processor, 1);
+            assert(input_buf);
+            assert(input_size <= processor->m_process_buf_capacity);
 
-            mem_buffer_clear_data(&processor->m_tmp_buffer);
-            input_buf = mem_buffer_alloc(&processor->m_tmp_buffer, input_size);
-
-            sodium_memzero((void*)input_buf, padding);
+            bzero((void*)input_buf, padding);
             memcpy(((char*)input_buf) + padding, plaintext, plaintext_size);
         }
         
@@ -251,7 +190,8 @@ int crypto_stream_encrypt(
     }
     else {
         ciphertext_size = plaintext_size;
-        ciphertext = mem_buffer_alloc(&processor->m_data_buffer, ciphertext_size);
+        ciphertext = crypto_processor_get_buf(processor, 0);
+        assert(ciphertext_size <= processor->m_process_buf_capacity);
 
         if (mbedtls_cipher_update(
                 cipher_ctx->evp,
@@ -281,67 +221,6 @@ int crypto_stream_encrypt(
     totall_len += once_len;
     
     return totall_len;
-}
-
-int crypto_stream_decrypt_all(
-    crypto_processor_t processor, write_stream_t ws, void const * ciphertext, uint32_t ciphertext_size)
-{
-    crypto_cipher_t cipher = processor->m_cipher;
-
-    if (ciphertext_size <= cipher->nonce_len) return -1;
-    
-    struct crypto_cipher_ctx_data cipher_ctx;
-    if (crypto_stream_ctx_init(processor, &cipher_ctx, 0) != 0) return -1;
-
-    memcpy(cipher_ctx.nonce, ciphertext, cipher->nonce_len);
-    
-    mem_buffer_clear_data(&processor->m_data_buffer);
-    size_t plaintext_size = ciphertext_size - cipher->nonce_len;
-    void * plaintext = mem_buffer_alloc(&processor->m_data_buffer, plaintext_size);
-        
-    if (processor->m_ppbloom && crypto_ppbloom_check(processor->m_ppbloom, cipher_ctx.nonce, (int)cipher->nonce_len) == 1) {
-        CPE_ERROR(processor->m_em, "crypto: stream: repeat IV detected");
-        return -1;
-    }
-
-    crypto_cipher_ctx_set_nonce(processor, &cipher_ctx, cipher_ctx.nonce, cipher->nonce_len, 0);
-
-    int err = 0;
-    if (cipher->method >= crypto_method_stream_salsa20) {
-        err = crypto_stream_xor_ic(
-            (uint8_t *)plaintext,
-            (const uint8_t *)(ciphertext) + cipher->nonce_len, (uint64_t)(ciphertext_size - cipher->nonce_len),
-            (const uint8_t *)cipher_ctx.nonce, 0, cipher->key, cipher->method);
-    }
-    else {
-        err = mbedtls_cipher_update(
-            cipher_ctx.evp,
-            (const uint8_t *)ciphertext, (size_t)ciphertext_size,
-            (uint8_t *)plaintext, &plaintext_size);
-    }
-
-    crypto_stream_ctx_fini(processor, &cipher_ctx);
-
-    if (err) {
-        return -1;
-    }
-
-    if (processor->m_debug >= 2) {
-        CPE_INFO(processor->m_em, "PLAIN: %s", cpe_hex_dup_buf(plaintext, plaintext_size, &processor->m_tmp_buffer));
-        CPE_INFO(processor->m_em, "CIPHER: %s", cpe_hex_dup_buf(ciphertext, ciphertext_size, &processor->m_tmp_buffer));
-        CPE_INFO(processor->m_em, "NONCE: %s", cpe_hex_dup_buf(cipher_ctx.nonce, cipher->nonce_len, &processor->m_tmp_buffer));
-    }
-
-    if (processor->m_ppbloom) {
-        crypto_ppbloom_add(processor->m_ppbloom, (void *)cipher_ctx.nonce, (int)cipher->nonce_len);
-    }
-
-    int len = stream_write(ws, plaintext, plaintext_size);
-    if (len != plaintext_size) {
-        return -1;
-    }
-
-    return len;
 }
 
 int crypto_stream_decrypt(
@@ -411,18 +290,18 @@ int crypto_stream_decrypt(
         int padding = cipher_ctx->counter % SODIUM_BLOCK_SIZE;
 
         plaintext_size = ciphertext_size;
-        plaintext = mem_buffer_alloc(&processor->m_data_buffer, (padding + ciphertext_size) * 2);
+        plaintext = crypto_processor_get_buf(processor, 0);
+        assert(plaintext_size <= processor->m_process_buf_capacity);
 
         void const * input_buf = ciphertext;
         size_t input_size = ciphertext_size;
         
         if (padding) {
             input_size += padding;
+            input_buf = crypto_processor_get_buf(processor, 1);
+            assert(input_size <= processor->m_process_buf_capacity);
 
-            mem_buffer_clear_data(&processor->m_tmp_buffer);
-            input_buf = mem_buffer_alloc(&processor->m_tmp_buffer, input_size);
-
-            sodium_memzero((void*)input_buf, padding);
+            bzero((void*)input_buf, padding);
             memcpy(((char*)input_buf) + padding, ciphertext, ciphertext_size);
         }
         
@@ -441,7 +320,8 @@ int crypto_stream_decrypt(
     }
     else {
         plaintext_size = ciphertext_size;
-        plaintext = mem_buffer_alloc(&processor->m_data_buffer, ciphertext_size);
+        plaintext = crypto_processor_get_buf(processor, 0);
+        assert(plaintext_size <= processor->m_process_buf_capacity);
         
         err = mbedtls_cipher_update(
             cipher_ctx->evp,

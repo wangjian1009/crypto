@@ -1,10 +1,11 @@
+#include <assert.h>
+#include "cpe/pal/pal_platform.h"
 #include "cpe/pal/pal_string.h"
 #include "cpe/pal/pal_strings.h"
 #include "cpe/pal/pal_stdio.h"
 #include "cpe/utils/base64.h"
 #include "cpe/utils/md5.h"
 #include "cpe/utils/stream_mem.h"
-#include "cpe/utils/stream_buffer.h"
 #include "cpe/utils/hex_utils.h"
 #include "crypto_processor_i.h"
 #include "crypto_cipher.h"
@@ -20,6 +21,7 @@ crypto_processor_create(
     const char *password, const char *key, crypto_method_t method)
 {
     crypto_processor_t processor;
+    uint8_t i;
 
     crypto_processor_entropy_check(em);
 
@@ -39,15 +41,21 @@ crypto_processor_create(
     processor->m_em = em;
     processor->m_debug = debug;
     processor->m_ppbloom = NULL;
-    mem_buffer_init(&processor->m_data_buffer, alloc);
     mem_buffer_init(&processor->m_tmp_buffer, alloc);
 
+    processor->m_process_block_size = 2048;
+    processor->m_process_buf_capacity = processor->m_process_block_size + 64;
+
+    for(i = 0; i < CPE_ARRAY_SIZE(processor->m_process_bufs); ++i) {
+        processor->m_process_bufs[i] = NULL;
+    }
+    
     if (method >= crypto_method_stream_min && method <= crypto_method_stream_max) {
         processor->m_cipher = crypto_chipper_stream_create(processor, password, key, method);
         if (processor->m_cipher == NULL) goto CREATE_ERROR; 
 
-        processor->encrypt_all = crypto_stream_encrypt_all;
-        processor->decrypt_all = crypto_stream_decrypt_all;
+        processor->encrypt_all = NULL;
+        processor->decrypt_all = NULL;
         processor->encrypt     = crypto_stream_encrypt;
         processor->decrypt     = crypto_stream_decrypt;
         processor->ctx_init    = crypto_stream_ctx_init;
@@ -102,8 +110,15 @@ void crypto_processor_free(crypto_processor_t processor) {
         crypto_cipher_free(processor, processor->m_cipher);
         processor->m_cipher = NULL;
     }
+
+    uint8_t i;
+    for(i = 0; i < CPE_ARRAY_SIZE(processor->m_process_bufs); ++i) {
+        if (processor->m_process_bufs[i]) {
+            mem_free(processor->m_alloc, processor->m_process_bufs[i]);
+            processor->m_process_bufs[i] = NULL;
+        }
+    }
     
-    mem_buffer_clear(&processor->m_data_buffer);
     mem_buffer_clear(&processor->m_tmp_buffer);
     mem_free(processor->m_alloc, processor);
 }
@@ -120,20 +135,89 @@ void crypto_processor_set_debug(crypto_processor_t processor, uint8_t debug) {
     processor->m_debug = debug;
 }
 
+uint8_t * crypto_processor_get_buf(crypto_processor_t processor, uint8_t id) {
+    assert(id < CPE_ARRAY_SIZE(processor->m_process_bufs));
+    if (processor->m_process_bufs[id] == NULL) {
+        processor->m_process_bufs[id] = mem_alloc(processor->m_alloc, processor->m_process_buf_capacity);
+    }
+    return processor->m_process_bufs[id];
+}
+
 int crypto_encrypt_all(crypto_processor_t processor, write_stream_t ws, void const * data, size_t data_len) {
-    return processor->encrypt_all(processor, ws, data, (uint32_t)data_len);
+    if (processor->encrypt_all) {
+        return processor->encrypt_all(processor, ws, data, (uint32_t)data_len);
+    }
+    else {
+        crypto_cipher_ctx_t ctx = crypto_cipher_ctx_create(processor, 1);
+        if (ctx == NULL) return -1;
+
+        int rv = crypto_encrypt(ctx, ws, data, data_len);
+        
+        crypto_cipher_ctx_free(ctx);
+
+        return rv;
+    }
 }
 
 int crypto_decrypt_all(crypto_processor_t processor, write_stream_t ws, void const * data, size_t data_len) {
-    return processor->decrypt_all(processor, ws, data, (uint32_t)data_len);
+    if (processor->decrypt_all) {
+        return processor->decrypt_all(processor, ws, data, (uint32_t)data_len);
+    }
+    else {
+        crypto_cipher_ctx_t ctx = crypto_cipher_ctx_create(processor, 0);
+        if (ctx == NULL) return -1;
+
+        int rv = crypto_decrypt(ctx, ws, data, data_len);
+        
+        crypto_cipher_ctx_free(ctx);
+
+        return rv;
+    }
 }
 
 int crypto_encrypt(crypto_cipher_ctx_t cipher_ctx, write_stream_t ws, void const * data, size_t data_len) {
-    return cipher_ctx->m_processor->encrypt(cipher_ctx->m_processor, &cipher_ctx->m_data, ws, data, (uint32_t)data_len);
+    crypto_processor_t processor = cipher_ctx->m_processor;
+    size_t output_len = 0;
+    int rv;
+    
+    while(data_len > processor->m_process_block_size) {
+        rv = processor->encrypt(processor, &cipher_ctx->m_data, ws, data, processor->m_process_block_size);
+        if (rv < 0) return rv;
+        
+        output_len += (size_t)rv;
+        data_len -= processor->m_process_block_size;
+        data = ((const char*)data) + processor->m_process_block_size;
+    }
+
+    assert(data_len > 0);
+    rv = cipher_ctx->m_processor->encrypt(cipher_ctx->m_processor, &cipher_ctx->m_data, ws, data, (uint32_t)data_len);
+    if (rv < 0) return rv;
+    output_len += (size_t)rv;
+
+    return (int)output_len;
 }
 
 int crypto_decrypt(crypto_cipher_ctx_t cipher_ctx, write_stream_t ws, void const * data, size_t data_len) {
-    return cipher_ctx->m_processor->decrypt(cipher_ctx->m_processor, &cipher_ctx->m_data, ws, data, (uint32_t)data_len);
+    crypto_processor_t processor = cipher_ctx->m_processor;
+    size_t output_len = 0;
+    int rv;
+    
+    assert(data_len > 0);
+    while(data_len > processor->m_process_block_size) {
+        rv = processor->decrypt(processor, &cipher_ctx->m_data, ws, data, processor->m_process_block_size);
+        if (rv < 0) return rv;
+        
+        output_len += (size_t)rv;
+        data_len -= processor->m_process_block_size;
+        data = ((const char *)data) + processor->m_process_block_size;
+    }
+
+    assert(data_len > 0);
+    rv = processor->decrypt(processor, &cipher_ctx->m_data, ws, data, (uint32_t)data_len);
+    if (rv < 0) return rv;
+    output_len += (size_t)rv;
+
+    return (int)output_len;
 }
 
 static void crypto_processor_entropy_check(error_monitor_t em) {
@@ -157,13 +241,11 @@ int crypto_parse_key(crypto_processor_t processor, const char *base64, uint8_t *
     size_t base64_len = strlen(base64);
 
     /*尝试解码 */
-    mem_buffer_clear_data(&processor->m_tmp_buffer);
-    
     struct read_stream_mem is = CPE_READ_STREAM_MEM_INITIALIZER(base64, base64_len);
-    struct write_stream_buffer ws = CPE_WRITE_STREAM_BUFFER_INITIALIZER(&processor->m_tmp_buffer);
+    struct write_stream_mem ws = CPE_WRITE_STREAM_MEM_INITIALIZER(key, key_len);
+    
     size_t out_len = cpe_base64_decode((write_stream_t)&ws, (read_stream_t)&is);
     if (out_len >= key_len) {
-        memcpy(key, mem_buffer_make_continuous(&processor->m_tmp_buffer, 0), key_len);
         if (processor->m_debug) {
             CPE_INFO(processor->m_em, "crypto: dump key: %s", cpe_hex_dup_buf(key, key_len, &processor->m_tmp_buffer));
         }
